@@ -4,6 +4,8 @@ Insurance-claim assistant: **Next.js web app** (`claimvision-web/`) for registra
 
 For deeper architecture notes aligned with the codebase, see [PROJECT_CONTEXT.txt](./PROJECT_CONTEXT.txt).
 
+**Live preview:** [https://insurance-claim-app-seven.vercel.app/](https://insurance-claim-app-seven.vercel.app/)
+
 ---
 
 ## Repository layout
