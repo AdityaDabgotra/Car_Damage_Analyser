@@ -1,0 +1,23 @@
+.dashboardShell {
+  display: flex;
+  min-height: 100vh;
+  background: #080a0f;
+}
+
+.dashboardMain {
+  flex: 1;
+  padding: 2.5rem;
+  overflow-y: auto;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .dashboardShell {
+    flex-direction: column;
+  }
+
+  .dashboardMain {
+    padding: 1.5rem;
+  }
+}
+

@@ -1,0 +1,225 @@
+.overview {
+  max-width: 900px;
+}
+
+.pageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
+}
+
+.pageHeader p {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.btnNew {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.6rem 1.2rem;
+  background: #4ade80;
+  color: #080a0f;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 0.88rem;
+  text-decoration: none;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btnNew:hover {
+  background: #86efac;
+  transform: translateY(-1px);
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+  margin-bottom: 2.5rem;
+}
+
+.statCard {
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.statCardGreen {
+  border-color: rgba(74, 222, 128, 0.15);
+}
+
+.statCardYellow {
+  border-color: rgba(251, 191, 36, 0.15);
+}
+
+.statCardRed {
+  border-color: rgba(248, 113, 113, 0.15);
+}
+
+.statLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.statValue {
+  font-size: 2.2rem;
+  font-weight: 900;
+  letter-spacing: -0.04em;
+  color: #f0f4ff;
+  line-height: 1;
+}
+
+.statValueGreen {
+  color: #4ade80;
+}
+
+.statValueYellow {
+  color: #fbbf24;
+}
+
+.statValueRed {
+  color: #f87171;
+}
+
+.statSub {
+  font-size: 0.75rem;
+  color: #4b5563;
+}
+
+.sectionHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.linkAll {
+  font-size: 0.83rem;
+  color: #4ade80;
+  text-decoration: none;
+}
+
+.linkAll:hover {
+  color: #86efac;
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.emptyIcon {
+  font-size: 2.5rem;
+  color: #374151;
+}
+
+.emptyState p {
+  color: #6b7280;
+  font-size: 0.9rem;
+}
+
+.btnNewSm {
+  padding: 0.5rem 1rem;
+  background: rgba(74, 222, 128, 0.1);
+  color: #4ade80;
+  border-radius: 6px;
+  font-size: 0.83rem;
+  font-weight: 600;
+  text-decoration: none;
+  border: 1px solid rgba(74, 222, 128, 0.2);
+}
+
+.claimsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.claimRow {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  background: #0d1117;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  text-decoration: none;
+  transition: all 0.15s;
+}
+
+.claimRow:hover {
+  border-color: rgba(74, 222, 128, 0.2);
+  transform: translateX(2px);
+}
+
+.claimCar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.carIconSvg {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  color: #4ade80;
+}
+
+.carName {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.claimDate {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-top: 0.1rem;
+}
+
+.claimCost {
+  font-size: 0.83rem;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.claimArrow {
+  color: #374151;
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .statsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .pageHeader {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .claimCost {
+    display: none;
+  }
+}
+

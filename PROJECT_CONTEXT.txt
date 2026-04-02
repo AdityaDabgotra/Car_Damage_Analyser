@@ -1,0 +1,360 @@
+================================================================================
+CLAIMVISION (insurance-claim-app) — PROJECT CONTEXT FOR AI / NEW CONTRIBUTORS
+================================================================================
+Last updated: 2026-04-02 — Folders: `claimvision-web/` (Next app), `damage-ai-services/` (Python CV + email API).
+
+NOTE: There is NO `src/` folder inside the Next.js app. All ClaimVision application
+code lives under `claimvision-web/`: `claimvision-web/app/`, `lib/`, `components/`,
+`models/`, `proxy.ts`, etc. (paths below are relative to `claimvision-web/` unless noted.)
+Python CV training, labeling, and the FastAPI+SMTP notification service live in
+`damage-ai-services/` at the repository root.
+
+================================================================================
+1. WHAT THIS PROJECT IS
+================================================================================
+ClaimVision is a Next.js (App Router) insurance-claim assistant: users register
+or sign in (email/password or Google), register vehicles, upload claim videos
+via Cloudinary, and get AI-assisted damage analysis (external CV API returning a
+fixed per-body-region map + Exa AI via OpenAI-compatible API for structured LLM
+recommendations). Data persists in MongoDB via Mongoose.
+
+Product name in package.json: "claimvision"
+
+================================================================================
+2. TECH STACK
+================================================================================
+- Framework: Next.js 16.2.x (Turbopack in dev), React 18, TypeScript
+- Auth: NextAuth v4, JWT sessions, Credentials + Google providers
+- DB: MongoDB + Mongoose 8
+- Validation: Zod (lib/validators/schemas.ts)
+- Media: Cloudinary (signed uploads from client)
+- AI:
+  - CV: HTTP client to user-hosted Express (or any) service — lib/ai/cvService.ts,
+    response normalized in lib/ai/cvApiNormalize.ts, validated with Zod (CVResponseSchema).
+  - LLM: OpenAI npm SDK → `https://api.exa.ai` (lib/ai/llmService.ts). Non-streaming chat
+    preferred first (fewer truncated JSON bodies); stream fallback if body empty. Balanced
+    `{...}` JSON extraction, token expansion retry, Zod — including normalizing LLM `action`
+    synonyms (e.g. "replacement" → `replace`).
+- Styling: Global CSS variables (app/globals.css), CSS Modules for dashboard
+- Lint: ESLint 10 + flat config (eslint.config.mjs) with Next compat via @eslint/eslintrc
+
+Explicitly NOT in the project anymore:
+- Redis, BullMQ, ioredis (removed)
+- Docker / docker-compose / Dockerfiles (removed)
+- Separate worker process (removed)
+
+================================================================================
+3. NPM SCRIPTS
+================================================================================
+Run from `claimvision-web/` (cd claimvision-web && …):
+npm run dev    — next dev
+npm run build  — next build
+npm run start  — next start
+npm run lint   — eslint . --ext .js,.jsx,.ts,.tsx
+
+================================================================================
+4. ENVIRONMENT VARIABLES
+================================================================================
+Configure `claimvision-web/.env` or `claimvision-web/.env.local` locally.
+
+Required / used in code (typical):
+- NEXTAUTH_URL, NEXTAUTH_SECRET
+- MONGODB_URI
+- GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET (Google OAuth)
+- CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+- CV_API_URL — full GET URL base to the CV service (e.g. http://127.0.0.1:8000/analyze_claim); video is sent as query param video_url (FastAPI snake_case)
+- CV_API_TIMEOUT_MS — optional HTTP timeout for CV (default ~90s)
+- EXA_API_KEY — Exa AI key (required for LLM step); OPENAI_API_KEY is accepted as
+  fallback only for migration — prefer EXA_API_KEY
+- EXA_LLM_MODEL — optional; default `exa` (faster). Alternatives: `exa-research`,
+  `exa-research-pro` (slower, heavier)
+- EXA_MAX_TOKENS — optional initial max output tokens for LLM (defaults in code ~8192,
+  with automatic expansion retry up to ~16384 on truncated JSON)
+- EXA_TIMEOUT_MS — optional HTTP timeout for Exa (default 600000 ms)
+
+There is NO REDIS_URL; queue/worker were removed.
+
+================================================================================
+5. HIGH-LEVEL FOLDER MAP
+================================================================================
+(All paths under `claimvision-web/` unless noted.)
+
+app/
+  api/auth/[...nextauth]/     NextAuth route handler
+  api/auth/register/          User registration
+  api/cars/, api/cars/[id]/   CRUD cars (auth required)
+  api/claims/, api/claims/[id]/, api/claims/[id]/status/
+  api/upload/sign/            Cloudinary signature for direct upload
+  api/user/change-password/   Credentials users only
+  auth/                       login, register, error pages
+  dashboard/                  protected UI (layout + pages + *.module.css)
+  layout.tsx, page.tsx, globals.css
+
+components/
+  dashboard/DashboardNav.tsx + DashboardNav.module.css  — left sidebar nav
+  providers/SessionProvider.tsx
+
+lib/
+  auth/config.ts              NextAuth options (callbacks map Google → DB user)
+  api/response.ts             successResponse, errorResponse, requireAuth
+  api/rateLimit.ts            in-memory rate limit (register + upload/sign)
+  db/connect.ts               Mongoose singleton (bufferCommands: false); Atlas hint on
+                              MongooseServerSelectionError
+  claims/processClaimAnalysis.ts  — in-process CV + LLM; atomic completion + safe failure
+  ai/cvService.ts, cvApiNormalize.ts, llmService.ts
+  cv/cvDisplay.ts             labels, sorting, affected-part helpers for dashboard CV UI
+  currency/inr.ts             ₹ + en-IN formatting; displayInrCostLabel for LLM cost strings
+  pagination.ts               parsePageParam / parseLimitParam (GET /api/claims)
+  validators/schemas.ts       CV_EXPECTED_PARTS, CVResponseSchema, LLMResponseSchema
+  logger.ts
+
+models/
+  User.ts, Car.ts, Claim.ts   Mongoose models + indexes
+
+proxy.ts                      Next.js 16 request proxy (next-auth withAuth; edge protection)
+next.config.js                turbopack.root, images, serverActions body limit
+types/, hooks/, utils/        Shared types, hooks, helpers
+
+================================================================================
+6. NEXT.JS 16: PROXY (NOT middleware.ts)
+================================================================================
+File: claimvision-web/proxy.ts
+
+Next.js 16 deprecates the middleware.ts filename in favor of proxy.ts. This
+project uses next-auth/middleware’s withAuth wrapped in a function named `proxy`.
+
+Behavior:
+- Matcher limits which routes run the proxy (dashboard + specific API prefixes).
+- /dashboard/* requires a token.
+- /api/* except /api/auth/* requires a token.
+- /dashboard/admin requires role === 'admin' else redirect to /dashboard.
+
+Do NOT add both middleware.ts and proxy.ts — Next errors if both exist.
+
+================================================================================
+7. NEXT.CONFIG.JS HIGHLIGHTS
+================================================================================
+- turbopack.root: __dirname — avoids wrong workspace root when a parent folder
+  has its own package-lock.json.
+- experimental.serverActions.bodySizeLimit: '100mb' — large uploads/metadata.
+- images.remotePatterns: cloudinary + Google avatars.
+
+================================================================================
+8. AUTHENTICATION — IMPORTANT DETAILS
+================================================================================
+File: lib/auth/config.ts
+
+- Session strategy: JWT (30-day maxAge).
+- Credentials provider returns user id from Mongo _id.
+- Google: signIn callback ensures a User document exists; providerId stored.
+- jwt callback: on sign-in, resolves token.id to MongoDB User._id using email
+  (so Google “user.id” provider id does not leak as application user id).
+
+File: lib/api/response.ts — requireAuth()
+
+- Calls connectDB() BEFORE any User lookup (needed with bufferCommands: false).
+- If session.user.id is a 24-char hex ObjectId, uses it.
+- Else resolves User by email, then by providerId string.
+- Throws "Unauthorized: please sign in" if unresolved.
+
+This prevents CastError when querying models with userId: ObjectId while using
+Google OAuth.
+
+================================================================================
+9. DATABASE MODELS (SUMMARY)
+================================================================================
+User
+  email (unique), password (credentials), provider, providerId, role, timestamps
+
+Car
+  userId ref User, brand, model, year, optional plate/color/vin
+  NOTE: ICar extends Omit<Document, 'model'> because `model` field name clashes
+  with Mongoose Document.model.
+
+Claim
+  userId, carId, status (queued|processing|completed|failed), video fields,
+  cvResponse, llmResponse, errorMessage, jobId, attemptCount, completedAt
+
+llmResponse.recommendations[].estimatedCost.currency defaults to INR in schema/model
+(legacy or LLM may still emit other strings; UI normalizes display).
+
+cvResponse (when present) is NOT an array of “damages”. It is a fixed map of 18
+vehicle regions (see CV_EXPECTED_PARTS in lib/validators/schemas.ts) to assessment
+strings: Replacement | No Damage | repair (plus optional analysisId, processedAt,
+framesCaptured). Mongoose stores the same keys on Claim.cvResponse.
+
+================================================================================
+10A. CV SERVICE (EXPRESS / EXTERNAL HTTP)
+================================================================================
+File: lib/ai/cvService.ts
+
+- GET to CV_API_URL with query parameter `video_url=<encoded cloudinary url>`. No API key.
+- Parses JSON, then lib/ai/cvApiNormalize.ts unwraps common envelopes (e.g. root
+  { data: { …parts } }) so Zod sees the flat per-part object.
+- Validates with CVResponseSchema (Zod) before persisting.
+- Retries, timeout (CV_API_TIMEOUT_MS), and an in-memory circuit breaker.
+
+================================================================================
+10B. LLM SERVICE (EXA AI, OPENAI-COMPATIBLE SDK)
+================================================================================
+File: lib/ai/llmService.ts
+
+- Uses `new OpenAI({ baseURL: "https://api.exa.ai", apiKey })` — same npm package as
+  OpenAI; traffic goes to Exa (see Exa OpenAI SDK docs).
+- Default EXA_LLM_MODEL is `exa`; optional `exa-research` / `exa-research-pro`.
+- **Non-streaming chat completion is tried first**; streaming is used only if the
+  non-stream body is empty (reduces mid-JSON truncation from Exa streams).
+- Parses assistant text to JSON: strips ```json fences; balanced-brace extraction;
+  truncation heuristics + higher `max_tokens` retry within an attempt; up to 3 outer
+  retries.
+- Zod `LLMResponseSchema`: recommendation `action` strings normalized to
+  repair | replace | monitor (e.g. `replacement` → replace).
+- Prompt stresses INR, concise reasons, valid JSON.
+
+================================================================================
+10C. DASHBOARD — CV DISPLAY
+================================================================================
+File: lib/cv/cvDisplay.ts (used by app/dashboard/claims/page.tsx and
+app/dashboard/claims/[id]/page.tsx)
+
+- formatCvPartLabel — human-readable labels from snake_case keys
+- cvAffectedParts / cvAffectedCount — regions where value ≠ "No Damage"
+- cvPartsSorted — affected regions first, then alphabetical
+- CV_ASSESSMENT_STYLE — chip colors per assessment string
+
+================================================================================
+10D. CURRENCY DISPLAY (INR)
+================================================================================
+File: lib/currency/inr.ts
+
+- formatInrAmount / formatInrRange — ₹ prefix + `en-IN` number grouping for part-level
+  estimates on claim detail.
+- displayInrCostLabel — sanitizes LLM free-text ranges (`$` → `₹`, USD → INR) on
+  dashboard overview, claim list, and detail summary banner.
+- LLM / Mongoose defaults use `INR` where applicable (not USD).
+
+================================================================================
+11. IN-PROCESS CLAIM PIPELINE (ORCHESTRATION)
+================================================================================
+File: lib/claims/processClaimAnalysis.ts — ties together §10A (CV) and §10B (LLM).
+
+- enqueueClaimAnalysis(claimId) returns "local-<claimId>" and starts
+  runClaimAnalysis(claimId) in the background (void promise). in-flight de-dupe:
+  same claimId won’t start a second worker while the first run is still active
+  (in-memory only — not distributed across multiple Node processes).
+
+- Flow: set `processing`, increment `attemptCount` → CV API → **save cvResponse**
+  (pollers can see partial results) → Car lookup → Exa LLM → **atomic success**:
+  `findOneAndUpdate({ _id, status: 'processing' }, { $set: cvResponse, llmResponse,
+  completed, completedAt, $unset: errorMessage })` so a completed retry is not
+  overwritten by a stale error path.
+
+- On error: `findOneAndUpdate({ _id, status: 'processing' }, { failed, errorMessage })`
+  only — **does not** overwrite a document already moved to `completed`.
+
+Used from:
+- app/api/claims/route.ts POST (create claim)
+- app/api/claims/[id]/route.ts POST (retry)
+
+Implications:
+- Work runs inside the Next.js Node process. Fine for long-running `next start`;
+  serverless hosts may hit timeouts for long jobs.
+
+================================================================================
+12. API ROUTES — QUICK REFERENCE
+================================================================================
+GET/POST   /api/auth/*           NextAuth + register (register rate-limited)
+GET/POST   /api/cars             List / create cars
+PUT/DELETE /api/cars/[id]        Update / delete (dynamic route: params Promise)
+
+GET/POST   /api/claims           Paginated list (`page`, `limit` via lib/pagination.ts
+                                — safe ints, avoids NaN) / create claim + enqueue analysis
+GET/POST   /api/claims/[id]      Get detail / retry analysis
+GET        /api/claims/[id]/status  Lightweight poll fields
+
+POST       /api/upload/sign      Cloudinary signed upload params (rate-limited)
+POST       /api/user/change-password
+
+Dynamic API route handlers use Next.js 15+ typing:
+  context: { params: Promise<{ id: string }> }
+  const { id } = await params;
+
+================================================================================
+13. DASHBOARD UI
+================================================================================
+app/dashboard/layout.tsx
+  Server layout: getServerSession, redirect if unauthenticated, shell + nav.
+
+app/dashboard/page.tsx
+  Overview stats; resolves Mongo userId via email / providerId / valid ObjectId
+  session id (see earlier auth notes).
+
+Styling:
+  app/dashboard/layout.module.css, page.module.css — CSS Modules (replaced
+  styled-jsx in server components for Next 16 compatibility).
+
+components/dashboard/DashboardNav.tsx
+  Client component; 240px wide sidebar on desktop; nav items Overview, New
+  Claim, Claim History, Profile; styling in DashboardNav.module.css (theme
+  aligned with globals.css variables).
+
+app/dashboard/claims/page.tsx and app/dashboard/claims/[id]/page.tsx
+  Claim list and detail show CV per-region assessments via lib/cv/cvDisplay.ts
+  (not a legacy damages[] array). Cost text uses lib/currency/inr.ts.
+
+app/dashboard/new-claim/page.tsx
+  Client upload to Cloudinary then POST /api/claims; the XHR Promise resolves only
+  after the claim API succeeds (not immediately after upload).
+
+================================================================================
+14. DESIGN TOKENS (app/globals.css)
+================================================================================
+CSS variables include:
+  --bg, --bg-surface, --bg-elevated, --border, --text-primary/secondary/muted,
+  --accent, --accent-dim, --accent-hover, --danger, --warning, --radius, etc.
+
+Font: DM Sans (ensure layout or globals loads it if used).
+
+================================================================================
+15. ESLINT
+================================================================================
+eslint.config.mjs uses FlatCompat to extend next/core-web-vitals and
+next/typescript. Requires @eslint/eslintrc in devDependencies.
+
+================================================================================
+16. USER MODEL INDEX NOTE
+================================================================================
+User schema: email has unique: true (creates index). Redundant UserSchema.index
+on email alone was removed to silence Mongoose duplicate index warnings.
+
+================================================================================
+17. TROUBLESHOOTING HINTS
+================================================================================
+- Turbopack “wrong workspace root” / multiple lockfiles: next.config turbopack.root
+- ECONNREFUSED Redis: should not occur anymore (Redis removed). If seen, stale
+  build — rm -rf .next and rebuild.
+- CastError on userId: check requireAuth() and session id resolution; ensure
+  connectDB() runs before User queries in API routes.
+- OAuth id in session: sign out/in after jwt callback changes.
+- CV API / claim analysis: ensure CV service returns the 18-part map (or wrapped
+  in data/result); check CV_API_URL, CV_API_TIMEOUT_MS, and server logs from
+  cvService / cvApiNormalize.
+- LLM “Empty LLM response” or invalid JSON: Exa often streams; llmService buffers
+  streams. Truncated JSON: EXA_MAX_TOKENS / automatic expansion; prefer concise
+  model output; try EXA_LLM_MODEL=exa for speed vs research models.
+- Legacy Mongo claims with cvResponse.damages[] will not match the new schema;
+  migrate data or re-run analysis.
+- MongoDB Atlas: `MongooseServerSelectionError` / IP whitelist — add your current IP
+  (or `0.0.0.0/0` for dev only) under Atlas → Network Access; see log hint in
+  lib/db/connect.ts.
+
+================================================================================
+18. README
+================================================================================
+README.md describes architecture without Docker/Redis; points to Mongo, `cd claimvision-web`
++ npm run dev, and in-process analysis. Keep PROJECT_CONTEXT.txt and README in sync when
+making large architectural changes.
+
+================================================================================
+END OF PROJECT_CONTEXT.txt
+================================================================================
